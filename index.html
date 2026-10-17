@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>LLM Response Judge</title>
+<meta name="description" content="Side-by-side rubric tool for rating two LLM responses and writing a justified preference.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{--bg:#0a1822;--surface:#10252f;--surface-2:#14303c;--line:#234552;--fg:#e5f0f1;--muted:#9bb3b8;--accent:#2ec4b6;--ink:#062a27;--spark:#ff7a3d;--bad:#ff7b72;--ok:#3fb950;--font-display:"Chakra Petch","Segoe UI",system-ui,sans-serif;--font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;--font-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;color-scheme:dark}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#f3f8f8;--surface:#ffffff;--surface-2:#e8f2f2;--line:#c5d9db;--fg:#10242b;--muted:#4c6870;--accent:#0b7f76;--ink:#ffffff;--spark:#c4501a;--bad:#c0392b;--ok:#1a7f37;color-scheme:light}}
+:root[data-theme="light"]{--bg:#f3f8f8;--surface:#ffffff;--surface-2:#e8f2f2;--line:#c5d9db;--fg:#10242b;--muted:#4c6870;--accent:#0b7f76;--ink:#ffffff;--spark:#c4501a;--bad:#c0392b;--ok:#1a7f37;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16px;line-height:1.55;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0}
+a{color:var(--accent);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.wrap{max-width:980px;margin:0 auto;padding-block:24px 56px}
+.crumb{font-family:var(--font-mono);font-size:13px;color:var(--muted);margin:0 0 28px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(30px,5vw,44px);line-height:1.1;margin:0 0 10px;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:600;font-size:21px;margin:32px 0 12px}
+.lede{color:var(--muted);max-width:68ch;margin:0 0 24px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+label{display:block;font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;color:var(--muted);margin:0 0 6px;text-transform:uppercase}
+input[type=text],select,textarea{width:100%;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 11px;min-width:0}
+textarea{resize:vertical;min-height:90px}
+.btn{font-family:var(--font-mono);font-size:14px;font-weight:500;padding:9px 16px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--ink)}
+.btn:hover{filter:brightness(1.12)}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--muted)}
+.err{color:var(--bad);font-family:var(--font-mono);font-size:14px;margin:10px 0 0;min-height:1.4em}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.crit{margin:0 0 14px}
+.crit-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.crit-top span{font-size:14px}
+.crit-top .v{font-family:var(--font-mono);color:var(--accent);min-width:2ch;text-align:right}
+.crit small{display:block;color:var(--muted);font-size:13px}
+input[type=range]{width:100%;accent-color:var(--accent);margin:6px 0 0}
+.flags{display:grid;gap:6px;margin-top:6px}
+.flags label{text-transform:none;letter-spacing:0;font-family:var(--font-body);font-size:14px;color:var(--fg);display:flex;gap:8px;align-items:center;margin:0}
+.score{display:flex;align-items:baseline;gap:10px;margin:0 0 14px}
+.score b{font-family:var(--font-display);font-size:38px;line-height:1}
+.score span{color:var(--muted);font-family:var(--font-mono);font-size:13px}
+.bar{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-bottom:16px}
+.bar i{display:block;height:100%;background:var(--accent);width:0}
+.pref{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.pref label{margin:0;text-transform:none;letter-spacing:0;font-family:var(--font-body);font-size:14px;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;background:var(--bg)}
+.pref input{position:absolute;opacity:0;pointer-events:none}
+.pref input:checked+span{color:var(--ink)}
+.pref label:has(input:checked){background:var(--accent);color:var(--ink);border-color:var(--accent)}
+.pref label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.note{font-size:14px;margin:12px 0 0;min-height:1.4em}
+.note.warn{color:var(--spark)}
+.count{font-family:var(--font-mono);font-size:13px;color:var(--muted);margin:6px 0 0}
+pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font-mono);font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:14px}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px}
+@media (max-width:760px){.two{grid-template-columns:minmax(0,1fr)}.pref{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<p class="crumb"><a href="../">Naveed Akhtar</a> / Apps / LLM Response Judge</p>
+<h1>LLM Response Judge</h1>
+<p class="lede">A rubric for comparing two model answers to the same prompt. Score each answer on weighted criteria, flag hard problems, pick an overall preference and write the reason. The tool checks that your preference agrees with your scores, which is the most common slip in evaluation work. Nothing leaves your browser.</p>
+
+<div class="card">
+  <label for="prompt">Prompt</label>
+  <textarea id="prompt" placeholder="Paste the user prompt here"></textarea>
+</div>
+
+<div class="two" style="margin-top:16px">
+  <div class="card"><label for="ra">Response A</label><textarea id="ra" placeholder="Paste response A"></textarea><p class="count" id="ca">0 words</p></div>
+  <div class="card"><label for="rb">Response B</label><textarea id="rb" placeholder="Paste response B"></textarea><p class="count" id="cb">0 words</p></div>
+</div>
+
+<h2>Rubric scores</h2>
+<div class="two">
+  <div class="card" id="boxA"></div>
+  <div class="card" id="boxB"></div>
+</div>
+
+<h2>Overall preference</h2>
+<div class="card">
+  <div class="pref" id="pref"></div>
+  <p class="note" id="sugg"></p>
+  <label for="why" style="margin-top:16px">Justification</label>
+  <textarea id="why" placeholder="Say which response is better and why. Point to the specific parts of each answer that drove your scores."></textarea>
+  <p class="count" id="cw">0 words. Aim for at least 25.</p>
+</div>
+
+<h2>Result</h2>
+<div class="card">
+  <pre id="out"></pre>
+  <div class="actions"><button class="btn primary" id="copy" type="button">Copy result</button><button class="btn" id="reset" type="button">Reset</button></div>
+</div>
+<footer>Built by Naveed Akhtar from day-to-day LLM response labeling and judgment work. <a href="../">Back to portfolio</a></footer>
+</main>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var CRIT=[
+ ['Accuracy',3,'Facts, logic and numbers are correct.'],
+ ['Instruction following',3,'Does exactly what the prompt asks, including format and limits.'],
+ ['Completeness',2,'Covers every part of the request without gaps.'],
+ ['Relevance',2,'Stays on the question. No padding or drift.'],
+ ['Clarity',1,'Easy to read and well organised.'],
+ ['Tone and style',1,'Fits the audience and the context.']];
+var FLAGS=['Contains a factual error','Ignores part of the instruction','Unsafe or policy problem','Off-topic or padded'];
+var PREF=['A much better','A slightly better','About the same','B slightly better','B much better'];
+var tw=CRIT.reduce(function(s,c){return s+c[1]},0);
+function build(id,side){
+  var h='<div class="score"><b id="s'+side+'">3.00</b><span>/ 5 weighted</span></div><div class="bar"><i id="b'+side+'"></i></div>';
+  CRIT.forEach(function(c,i){h+='<div class="crit"><div class="crit-top"><span>'+c[0]+' <span class="muted">(x'+c[1]+')</span></span><span class="v" id="v'+side+i+'">3</span></div><small>'+c[2]+'</small><input type="range" min="1" max="5" step="1" value="3" id="r'+side+i+'" aria-label="'+c[0]+' for response '+side+'"></div>'});
+  h+='<label>Flags</label><div class="flags">'+FLAGS.map(function(f,i){return '<label><input type="checkbox" id="f'+side+i+'"> '+f+'</label>'}).join('')+'</div>';
+  $(id).innerHTML='<label style="color:var(--accent)">Response '+side+'</label>'+h
+}
+build('boxA','A');build('boxB','B');
+$('pref').innerHTML=PREF.map(function(p,i){return '<label><input type="radio" name="pref" value="'+i+'"'+(i===2?' checked':'')+'><span>'+p+'</span></label>'}).join('');
+function score(side){var s=0;CRIT.forEach(function(c,i){s+=c[1]*(+$('r'+side+i).value)});return s/tw}
+function flags(side){return FLAGS.filter(function(f,i){return $('f'+side+i).checked})}
+function words(t){var m=t.trim().match(/\S+/g);return m?m.length:0}
+function sugg(d){return d>=1?0:d>=0.3?1:d>-0.3?2:d>-1?3:4}
+function update(){
+  var a=score('A'),b=score('B');
+  ['A','B'].forEach(function(s){var v=s==='A'?a:b;$('s'+s).textContent=v.toFixed(2);$('b'+s).style.width=((v-1)/4*100)+'%';CRIT.forEach(function(c,i){$('v'+s+i).textContent=$('r'+s+i).value})});
+  $('ca').textContent=words($('ra').value)+' words';$('cb').textContent=words($('rb').value)+' words';
+  var pv=+document.querySelector('input[name=pref]:checked').value,sg=sugg(a-b),n=$('sugg');
+  n.className='note';
+  if(Math.abs(pv-sg)>=2){n.className='note warn';n.textContent='Your scores point to "'+PREF[sg]+'" but you chose "'+PREF[pv]+'". Change one of them, or explain the gap in your justification.'}
+  else n.textContent='Rubric suggests: '+PREF[sg]+'.';
+  var w=words($('why').value);$('cw').textContent=w+' words.'+(w<25?' Aim for at least 25.':'');
+  var fa=flags('A'),fb=flags('B'),L=[];
+  L.push('Prompt: '+($('prompt').value.trim().slice(0,160)||'(not entered)'));
+  L.push('');
+  L.push('Response A score: '+a.toFixed(2)+' / 5'+(fa.length?'   Flags: '+fa.join('; '):''));
+  L.push('Response B score: '+b.toFixed(2)+' / 5'+(fb.length?'   Flags: '+fb.join('; '):''));
+  CRIT.forEach(function(c,i){L.push('  '+c[0]+': A '+$('rA'+i).value+', B '+$('rB'+i).value)});
+  L.push('');L.push('Preference: '+PREF[pv]);
+  L.push('Justification: '+($('why').value.trim()||'(not entered)'));
+  $('out').textContent=L.join('\n')
+}
+document.addEventListener('input',function(e){if(e.target.closest('main'))update()});
+document.addEventListener('change',function(e){if(e.target.closest('main'))update()});
+$('copy').addEventListener('click',function(){var b=$('copy');function d(t){b.textContent=t;setTimeout(function(){b.textContent='Copy result'},1600)}
+  try{navigator.clipboard.writeText($('out').textContent).then(function(){d('Copied')},function(){d('Not allowed')})}catch(e){d('Not allowed')}});
+$('reset').addEventListener('click',function(){
+  ['prompt','ra','rb','why'].forEach(function(i){$(i).value=''});
+  ['A','B'].forEach(function(s){CRIT.forEach(function(c,i){$('r'+s+i).value=3});FLAGS.forEach(function(f,i){$('f'+s+i).checked=false})});
+  document.querySelector('input[name=pref][value="2"]').checked=true;update()});
+update();
+})();
+</script>
+</body>
+</html>
